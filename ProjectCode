@@ -1,0 +1,60 @@
+#define PWM_PIN 6        // PWM output pin (Mega: Timer 4 controls Pin 6)
+#define FEEDBACK_PIN A1  // Analog pin for voltage feedback
+
+// PD Controller Constants
+float Kp = 75.0;   // Proportional gain
+float Kd = 10.0;   // Derivative gain
+
+// Voltage divider scaling factor (47k & 4.7k)
+#define SCALING_FACTOR 11.2173
+
+// Setpoint Voltage (Target Output)
+float Vout_setpoint = 12.0;
+
+float prev_error = 0;
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(PWM_PIN, OUTPUT);
+  pinMode(FEEDBACK_PIN, INPUT);
+
+  // Configure Timer 4 for 30kHz PWM on Pin 6
+  TCCR4A = _BV(COM4A1) | _BV(WGM41);  // Fast PWM, non-inverted
+  TCCR4B = _BV(WGM43) | _BV(WGM42) | _BV(CS40);  // No prescaler
+  ICR4 = 533;  // Set PWM frequency to 30kHz
+
+  setPWMPercentage(50.0);  // Start with 50% duty cycle
+}
+
+void loop() {
+  // Read feedback voltage
+  int adc_value = analogRead(FEEDBACK_PIN);
+  float Vout = (adc_value * 5.0 / 1023) * SCALING_FACTOR;
+
+  // Calculate error
+  float error = Vout_setpoint - Vout;
+  
+  // Calculate derivative (rate of change of error)
+  float derivative = (error - prev_error);
+
+  // PD Control Calculation
+  float control = (Kp * error) + (Kd * derivative);
+
+  // Convert control output to PWM duty cycle percentage
+  float duty_percent = constrain(control, 0.0, 90.0);
+
+  // Apply PWM control
+  setPWMPercentage(duty_percent);
+  // Serial.println(duty_percent);
+
+  // Store previous error
+  prev_error = error;
+
+  delay(10);  // Small delay for stability
+}
+
+// Function to set PWM duty cycle in percentage (0-100%)
+void setPWMPercentage(float percent) {
+  percent = constrain(percent, 0.0, 90.0);  // Ensure within valid range
+  OCR4A = (percent / 100.0) * ICR4;  // Convert percentage to PWM value
+}
